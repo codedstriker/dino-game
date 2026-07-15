@@ -27,21 +27,7 @@
 
         /* =========================================================================
            FULL-PAGE VIEWPORT LAYOUT (UI/Layout Refactor)
-           ---------------------------------------------------------------------
-           #game-container used to be an in-flow, centered box capped at
-           `max-w-3xl`, which left large unused margins on anything wider than
-           a small tablet. It's now pinned to the full browser viewport with
-           `position: fixed; inset: 0`, so it always occupies exactly
-           100vw x 100vh (100dvh is used as the primary value so iOS/Android's
-           collapsing/expanding browser chrome never clips or letterboxes the
-           game incorrectly -- 100vh is kept as a fallback for browsers that
-           don't support dvh yet). The title (<h1>) now lives *inside* this
-           container as an absolutely-positioned HUD element instead of a
-           separate block above it, so it no longer steals vertical space that
-           should belong to the canvas -- see fitCanvasToViewport() in the
-           script, which now fits against the *entire* viewport with only a
-           small safe-area pad, not "viewport minus title chrome".
-           ------------------------------------------------------------------- */
+           --------------------------------------------------------------------- */
         #game-container {
             position: fixed;
             inset: 0;
@@ -53,25 +39,10 @@
             justify-content: center;
             overflow: hidden;
             image-rendering: pixelated;
-            /* Deliberately left at the default touch-action ('auto') rather than
-               'none' -- #shop-panel (a scrollable descendant, see below) needs to
-               inherit permission to pan. touch-action is applied as the
-               INTERSECTION of an element and all its ancestors, so locking this
-               down here would also lock the shop's scroll list. Instead, only
-               the actual play surface (#gameCanvas / #overlay, below) is locked. */
         }
 
         /* ---------------------------------------------------------------------
-           RESPONSIVE VIEWPORT SCALING (see fitCanvasToViewport() in the script)
-           -----------------------------------------------------------------------
-           The canvas's internal drawing resolution never changes -- only its
-           CSS box does. `max-width:100%` is just a pre-JS safety net; the real
-           sizing happens every load/resize/orientation-change in JS, which is
-           more reliable than pure CSS across iOS Safari's dynamic toolbar,
-           Android split-screen, and orientation changes. `image-rendering:
-           pixelated` is what keeps the pixel-art crisp (nearest-neighbor)
-           instead of blurry (bilinear) no matter how large the CSS box scales
-           relative to the fixed 800x250 internal resolution.
+           RESPONSIVE VIEWPORT SCALING
            ------------------------------------------------------------------- */
         canvas {
             display: block;
@@ -84,10 +55,7 @@
             image-rendering: crisp-edges;
         }
 
-        /* Safe-area aware HUD padding -- keeps the title/score/badges clear of
-           notches, camera cutouts, and rounded corners on full-screen mobile
-           devices, while degrading gracefully to a plain 1rem pad on desktop
-           browsers/older devices that don't support env(). */
+        /* Safe-area aware HUD padding */
         #hud-title {
             top: max(0.75rem, env(safe-area-inset-top));
         }
@@ -105,8 +73,7 @@
             -webkit-touch-callout: none;
         }
 
-        /* Dark mode support (page chrome only -- the game canvas has its own
-           independent day/night cycle driven by score, see JS below) */
+        /* Dark mode support */
         @media (prefers-color-scheme: dark) {
             body {
                 background-color: #202124;
@@ -194,10 +161,14 @@
         <div id="shop-overlay" class="absolute inset-0 z-30 hidden flex items-center justify-center bg-black/70 p-4">
             <div id="shop-panel" class="bg-white dark:bg-gray-900 border-2 border-gray-400 dark:border-gray-600 rounded-lg p-4 md:p-5 max-w-sm w-full max-h-[92%] overflow-y-auto text-gray-700 dark:text-gray-200">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xs md:text-sm">🛒 SKIN SHOP</h2>
+                    <h2 class="text-xs md:text-sm">🛒 SHOP</h2>
                     <div id="shop-coin-display" class="text-[10px] md:text-xs text-yellow-600 dark:text-yellow-400">🪙 0</div>
                 </div>
-                <div id="shop-grid" class="grid grid-cols-2 gap-3"></div>
+                <div class="flex gap-2 mb-3">
+                    <button id="tab-skins-btn" class="flex-1 text-[10px] md:text-xs px-2 py-1.5 border-2 rounded transition-colors border-yellow-400 bg-yellow-400/10 text-yellow-600 dark:text-yellow-400">🦖 Skins</button>
+                    <button id="tab-trails-btn" class="flex-1 text-[10px] md:text-xs px-2 py-1.5 border-2 rounded transition-colors border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700">✨ Trails</button>
+                </div>
+                <div id="shop-grid" class="grid grid-cols-2 gap-3 pb-2"></div>
                 <button id="shop-close-btn" class="mt-4 w-full px-4 py-2 border-2 border-gray-400 dark:border-gray-500 rounded text-[10px] md:text-xs hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     Close
                 </button>
@@ -209,6 +180,9 @@
     </div>
 
     <script>
+        /* =========================================================================
+         * INITIALIZATION & SEED CONTROLS
+         * ========================================================================= */
         const gameContainer = document.getElementById('game-container');
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -224,10 +198,9 @@
         const shopGrid = document.getElementById('shop-grid');
         const shopCoinDisplay = document.getElementById('shop-coin-display');
         const shopCloseBtn = document.getElementById('shop-close-btn');
+        const tabSkinsBtn = document.getElementById('tab-skins-btn');
+        const tabTrailsBtn = document.getElementById('tab-trails-btn');
 
-        /* =========================================================================
-         * CONFIGURATION
-         * ========================================================================= */
         const CANVAS_WIDTH = 800;
         const CANVAS_HEIGHT = 250;
         const GROUND_Y = 210;
@@ -287,65 +260,98 @@
         }
 
         /* =========================================================================
-         * SKINS
+         * SKINS (Complete List of 50)
          * ========================================================================= */
         const SKINS = [
-    { id: 'classic', name: 'Classic', cost: 0, colors: null },
-    { id: 'cyber', name: 'Cyber Dino', cost: 150, colors: { body: '#00e5ff', accent: '#ff2bd6', eye: '#0a0a0a' }, glow: '#00e5ff' },
-    { id: 'wizard', name: 'Wizard Dino', cost: 300, colors: { body: '#7c4dff', accent: '#ffd54a', eye: '#ffffff' }, glow: '#b98bff' },
-    { id: 'lava', name: 'Lava Dino', cost: 450, colors: { body: '#3a2a2a', accent: '#ff6a00', eye: '#ffcf40' }, glow: '#ff6a00' },
-    { id: 'ghost', name: 'Ghost Dino', cost: 600, colors: { body: '#cfe8ff', accent: '#8fd3ff', eye: '#2b3a55' }, glow: '#bfe3ff', alpha: 0.55 },
-    { id: 'camo', name: 'Camo Dino', cost: 700, colors: { body: '#5b6b45', accent: '#3f4a2e', eye: '#1c1c1c' } },
-    { id: 'retro', name: 'Retro Arcade', cost: 800, colors: { body: '#e8483c', accent: '#ffd23f', eye: '#111111' }, glow: '#ffd23f' },
-    { id: 'ninja', name: 'Ninja Dino', cost: 1200, colors: { body: '#1b1b1f', accent: '#e0263e', eye: '#ffffff' }, glow: '#e0263e' },
-    { id: 'golden', name: 'Golden Dino', cost: 2000, colors: { body: '#e6b400', accent: '#fff2b0', eye: '#3a2a00' }, glow: '#ffd700' },
-    { id: 'samurai', name: 'Samurai Dino', cost: 2500, colors: { body: '#800000', accent: '#ffd700', eye: '#ffffff' }, glow: '#ffd700' },
-    { id: 'neonglitch', name: 'Neon Glitch', cost: 2800, colors: { body: '#0d0d12', accent: '#ff2bd6', eye: '#00e5ff' }, glow: '#00e5ff' },
-    { id: 'mecha', name: 'Mecha Dino', cost: 3500, colors: { body: '#8a94a6', accent: '#2fd1ff', eye: '#ff3b3b' }, glow: '#2fd1ff' },
-    { id: 'streetdrip', name: 'Street Drip', cost: 4000, colors: { body: '#7a2f8a', accent: '#ffd700', eye: '#111111' }, glow: '#ffd700' },
-    { id: 'biolum', name: 'Bioluminescent', cost: 5000, colors: { body: '#0a2e36', accent: '#00ffcc', eye: '#00ffcc' }, glow: '#00ffcc' },
-    { id: 'icecrystal', name: 'Ice Crystal', cost: 6000, colors: { body: '#bfe9ff', accent: '#ffffff', eye: '#1c3a52' }, glow: '#8fd8ff', alpha: 0.95 },
-    { id: 'vampire', name: 'Vampire Lord', cost: 7500, colors: { body: '#1a1a1a', accent: '#990000', eye: '#ff0000' }, glow: '#990000' },
-    { id: 'thunder', name: 'Thunder Lord', cost: 8500, colors: { body: '#1c2340', accent: '#ffe66d', eye: '#ffe66d' }, glow: '#ffe66d' },
-    { id: 'toxicslime', name: 'Toxic Slime', cost: 10500, colors: { body: '#5cb82a', accent: '#c6ff3d', eye: '#0e2b00' }, glow: '#c6ff3d' },
-    { id: 'fallout', name: 'Radioactive', cost: 12000, colors: { body: '#2b331f', accent: '#adff00', eye: '#adff00' }, glow: '#adff00' },
-    { id: 'voidshadow', name: 'Void Shadow', cost: 13000, colors: { body: '#15101d', accent: '#8f2bff', eye: '#c99bff' }, glow: '#8f2bff' },
-    { id: 'phoenixember', name: 'Phoenix Ember', cost: 15000, colors: { body: '#ff5b1f', accent: '#ffd23f', eye: '#7a1400' }, glow: '#ff8a3d' },
-    { id: 'astral', name: 'Astral Ghost', cost: 18000, colors: { body: '#4a0080', accent: '#00ffff', eye: '#ffffff' }, glow: '#00ffff', alpha: 0.9 },
-    { id: 'angelic', name: 'Angelic Wings', cost: 25000, colors: { body: '#fffdf5', accent: '#ffe27a', eye: '#8a7a3a' }, glow: '#fff2b8' },
-    { id: 'solarflare', name: 'Solar Flare', cost: 30000, colors: { body: '#ff4500', accent: '#ffff00', eye: '#ffffff' }, glow: '#ffff00' },
-    { id: 'demonic', name: 'Demonic Hellfire', cost: 35000, colors: { body: '#2b0505', accent: '#ff2200', eye: '#ffcf40' }, glow: '#ff3300' },
-    { id: 'necromancer', name: 'Necromancer', cost: 40000, colors: { body: '#1f2421', accent: '#49e691', eye: '#49e691' }, glow: '#49e691' },
-    { id: 'holomatrix', name: 'Holographic Matrix', cost: 45000, colors: { body: '#0c0c14', accent: '#39ff9d', eye: '#ffffff' }, glow: '#39ff9d' },
-    { id: 'prismatic', name: 'Prismatic', cost: 50000, colors: { body: '#ffffff', accent: '#ff00ff', eye: '#00ffff' }, glow: '#ff00ff' },
-    { id: 'quantumplasma', name: 'Quantum Plasma', cost: 60000, colors: { body: '#4a1fb8', accent: '#00e5ff', eye: '#e0d0ff' }, glow: '#8f5bff', alpha: 0.92 },
-    { id: 'mercury', name: 'Liquid Mercury', cost: 70000, colors: { body: '#a8adb4', accent: '#ffffff', eye: '#00e5ff' }, glow: '#00e5ff' },
-    { id: 'valkyrie', name: 'Valkyrie', cost: 85000, colors: { body: '#f4f4f4', accent: '#d4af37', eye: '#00bfff' }, glow: '#d4af37' },
-    { id: 'goldengod', name: 'Golden God', cost: 100000, colors: { body: '#ffd700', accent: '#fff6cf', eye: '#5a3d00' }, glow: '#ffe066' },
-    { id: 'blackhole', name: 'Black Hole Void', cost: 120000, colors: { body: '#050505', accent: '#ff6600', eye: '#ff6600' }, glow: '#ff6600' },
-    { id: 'chronolord', name: 'Chrono Lord', cost: 150000, colors: { body: '#241b4a', accent: '#c9a24b', eye: '#ffdf8a' }, glow: '#8f7bff' },
-    { id: 'supernova', name: 'Supernova', cost: 180000, colors: { body: '#ffffff', accent: '#b800ff', eye: '#ffffff' }, glow: '#b800ff' },
-    { id: 'infinitydino', name: 'Infinity Dino', cost: 200000, colors: { body: '#0a0a1a', accent: '#ff6ad5', eye: '#ffffff' }, glow: '#7a5cff' },
-    { id: 'cyberlord', name: 'Cyberlord', cost: 220000, colors: { body: '#111118', accent: '#ff003c', eye: '#ff003c' }, glow: '#ff003c' },
-    { id: 'glitchking', name: 'The Glitch King', cost: 250000, colors: { body: '#111111', accent: '#ff0044', eye: '#00ffe0' }, glow: '#ff0044' },
-    { id: 'rift', name: 'Dimensional Rift', cost: 280000, colors: { body: '#20003b', accent: '#00ffcc', eye: '#ff00ff' }, glow: '#00ffcc' },
-    { id: 'darkmatter', name: 'Dark Matter', cost: 350000, colors: { body: '#080014', accent: '#8000ff', eye: '#ff00aa' }, glow: '#8000ff' },
-    { id: 'chronoshatter', name: 'Chrono-Shatter', cost: 450000, colors: { body: '#1a2035', accent: '#f3c623', eye: '#ffffff' }, glow: '#f3c623' },
-    { id: 'seraphim', name: 'Omega Seraph', cost: 600000, colors: { body: '#ffffff', accent: '#ffd700', eye: '#ffd700' }, glow: '#ffd700' },
-    { id: 'nebula', name: 'Nebula Emperor', cost: 750000, colors: { body: '#0d0221', accent: '#ff007f', eye: '#00f0ff' }, glow: '#ff007f' },
-    { id: 'quantum', name: "Schrödinger's Dino", cost: 900000, colors: { body: '#008080', accent: '#800080', eye: '#ffffff' }, glow: '#800080', alpha: 0.92 },
-    { id: 'singularity', name: 'The Singularity', cost: 1200000, colors: { body: '#000000', accent: '#00ffff', eye: '#ffffff' }, glow: '#00ffff' },
-    { id: 'genesis', name: 'World Tree Genesis', cost: 1800000, colors: { body: '#1e3f20', accent: '#ffd700', eye: '#00ff88' }, glow: '#ffd700' },
-    { id: 'wireframe', name: 'The Architect', cost: 2500000, colors: { body: '#001100', accent: '#00ff00', eye: '#ffffff' }, glow: '#00ff00' },
-    { id: 'realityweaver', name: 'Reality Weaver', cost: 4000000, colors: { body: '#2a003f', accent: '#ff0055', eye: '#00ffff' }, glow: '#ff0055' },
-    { id: 'omnigod', name: 'Omni-God', cost: 6500000, colors: { body: '#e6e6fa', accent: '#8a2be2', eye: '#ffd700' }, glow: '#8a2be2' },
-    { id: 'developer', name: 'The Developer', cost: 10000000, colors: { body: '#000000', accent: '#39ff14', eye: '#ff0000' }, glow: '#39ff14' }
+            { id: 'classic', name: 'Classic', cost: 0, colors: null },
+            { id: 'cyber', name: 'Cyber Dino', cost: 150, colors: { body: '#00e5ff', accent: '#ff2bd6', eye: '#0a0a0a' }, glow: '#00e5ff' },
+            { id: 'wizard', name: 'Wizard Dino', cost: 300, colors: { body: '#7c4dff', accent: '#ffd54a', eye: '#ffffff' }, glow: '#b98bff' },
+            { id: 'lava', name: 'Lava Dino', cost: 450, colors: { body: '#3a2a2a', accent: '#ff6a00', eye: '#ffcf40' }, glow: '#ff6a00' },
+            { id: 'ghost', name: 'Ghost Dino', cost: 600, colors: { body: '#cfe8ff', accent: '#8fd3ff', eye: '#2b3a55' }, glow: '#bfe3ff', alpha: 0.55 },
+            { id: 'camo', name: 'Camo Dino', cost: 700, colors: { body: '#5b6b45', accent: '#3f4a2e', eye: '#1c1c1c' } },
+            { id: 'retro', name: 'Retro Arcade', cost: 800, colors: { body: '#e8483c', accent: '#ffd23f', eye: '#111111' }, glow: '#ffd23f' },
+            { id: 'ninja', name: 'Ninja Dino', cost: 1200, colors: { body: '#1b1b1f', accent: '#e0263e', eye: '#ffffff' }, glow: '#e0263e' },
+            { id: 'golden', name: 'Golden Dino', cost: 2000, colors: { body: '#e6b400', accent: '#fff2b0', eye: '#3a2a00' }, glow: '#ffd700' },
+            { id: 'samurai', name: 'Samurai Dino', cost: 2500, colors: { body: '#800000', accent: '#ffd700', eye: '#ffffff' }, glow: '#ffd700' },
+            { id: 'neonglitch', name: 'Neon Glitch', cost: 2800, colors: { body: '#0d0d12', accent: '#ff2bd6', eye: '#00e5ff' }, glow: '#00e5ff' },
+            { id: 'mecha', name: 'Mecha Dino', cost: 3500, colors: { body: '#8a94a6', accent: '#2fd1ff', eye: '#ff3b3b' }, glow: '#2fd1ff' },
+            { id: 'streetdrip', name: 'Street Drip', cost: 4000, colors: { body: '#7a2f8a', accent: '#ffd700', eye: '#111111' }, glow: '#ffd700' },
+            { id: 'biolum', name: 'Bioluminescent', cost: 5000, colors: { body: '#0a2e36', accent: '#00ffcc', eye: '#00ffcc' }, glow: '#00ffcc' },
+            { id: 'icecrystal', name: 'Ice Crystal', cost: 6000, colors: { body: '#bfe9ff', accent: '#ffffff', eye: '#1c3a52' }, glow: '#8fd8ff', alpha: 0.95 },
+            { id: 'vampire', name: 'Vampire Lord', cost: 7500, colors: { body: '#1a1a1a', accent: '#990000', eye: '#ff0000' }, glow: '#990000' },
+            { id: 'thunder', name: 'Thunder Lord', cost: 8500, colors: { body: '#1c2340', accent: '#ffe66d', eye: '#ffe66d' }, glow: '#ffe66d' },
+            { id: 'toxicslime', name: 'Toxic Slime', cost: 10500, colors: { body: '#5cb82a', accent: '#c6ff3d', eye: '#0e2b00' }, glow: '#c6ff3d' },
+            { id: 'fallout', name: 'Radioactive', cost: 12000, colors: { body: '#2b331f', accent: '#adff00', eye: '#adff00' }, glow: '#adff00' },
+            { id: 'voidshadow', name: 'Void Shadow', cost: 13000, colors: { body: '#15101d', accent: '#8f2bff', eye: '#c99bff' }, glow: '#8f2bff' },
+            { id: 'phoenixember', name: 'Phoenix Ember', cost: 15000, colors: { body: '#ff5b1f', accent: '#ffd23f', eye: '#7a1400' }, glow: '#ff8a3d' },
+            { id: 'astral', name: 'Astral Ghost', cost: 18000, colors: { body: '#4a0080', accent: '#00ffff', eye: '#ffffff' }, glow: '#00ffff', alpha: 0.9 },
+            { id: 'angelic', name: 'Angelic Wings', cost: 25000, colors: { body: '#fffdf5', accent: '#ffe27a', eye: '#8a7a3a' }, glow: '#fff2b8' },
+            { id: 'solarflare', name: 'Solar Flare', cost: 30000, colors: { body: '#ff4500', accent: '#ffff00', eye: '#ffffff' }, glow: '#ffff00' },
+            { id: 'demonic', name: 'Demonic Hellfire', cost: 35000, colors: { body: '#2b0505', accent: '#ff2200', eye: '#ffcf40' }, glow: '#ff3300' },
+            { id: 'necromancer', name: 'Necromancer', cost: 40000, colors: { body: '#1f2421', accent: '#49e691', eye: '#49e691' }, glow: '#49e691' },
+            { id: 'holomatrix', name: 'Holographic Matrix', cost: 45000, colors: { body: '#0c0c14', accent: '#39ff9d', eye: '#ffffff' }, glow: '#39ff9d' },
+            { id: 'prismatic', name: 'Prismatic', cost: 50000, colors: { body: '#ffffff', accent: '#ff00ff', eye: '#00ffff' }, glow: '#ff00ff' },
+            { id: 'quantumplasma', name: 'Quantum Plasma', cost: 60000, colors: { body: '#4a1fb8', accent: '#00e5ff', eye: '#e0d0ff' }, glow: '#8f5bff', alpha: 0.92 },
+            { id: 'mercury', name: 'Liquid Mercury', cost: 70000, colors: { body: '#a8adb4', accent: '#ffffff', eye: '#00e5ff' }, glow: '#00e5ff' },
+            { id: 'valkyrie', name: 'Valkyrie', cost: 85000, colors: { body: '#f4f4f4', accent: '#d4af37', eye: '#00bfff' }, glow: '#d4af37' },
+            { id: 'goldengod', name: 'Golden God', cost: 100000, colors: { body: '#ffd700', accent: '#fff6cf', eye: '#5a3d00' }, glow: '#ffe066' },
+            { id: 'blackhole', name: 'Black Hole Void', cost: 120000, colors: { body: '#050505', accent: '#ff6600', eye: '#ff6600' }, glow: '#ff6600' },
+            { id: 'chronolord', name: 'Chrono Lord', cost: 150000, colors: { body: '#241b4a', accent: '#c9a24b', eye: '#ffdf8a' }, glow: '#8f7bff' },
+            { id: 'supernova', name: 'Supernova', cost: 180000, colors: { body: '#ffffff', accent: '#b800ff', eye: '#ffffff' }, glow: '#b800ff' },
+            { id: 'infinitydino', name: 'Infinity Dino', cost: 200000, colors: { body: '#0a0a1a', accent: '#ff6ad5', eye: '#ffffff' }, glow: '#7a5cff' },
+            { id: 'cyberlord', name: 'Cyberlord', cost: 220000, colors: { body: '#111118', accent: '#ff003c', eye: '#ff003c' }, glow: '#ff003c' },
+            { id: 'glitchking', name: 'The Glitch King', cost: 250000, colors: { body: '#111111', accent: '#ff0044', eye: '#00ffe0' }, glow: '#ff0044' },
+            { id: 'rift', name: 'Dimensional Rift', cost: 280000, colors: { body: '#20003b', accent: '#00ffcc', eye: '#ff00ff' }, glow: '#00ffcc' },
+            { id: 'darkmatter', name: 'Dark Matter', cost: 350000, colors: { body: '#080014', accent: '#8000ff', eye: '#ff00aa' }, glow: '#8000ff' },
+            { id: 'chronoshatter', name: 'Chrono-Shatter', cost: 450000, colors: { body: '#1a2035', accent: '#f3c623', eye: '#ffffff' }, glow: '#f3c623' },
+            { id: 'seraphim', name: 'Omega Seraph', cost: 600000, colors: { body: '#ffffff', accent: '#ffd700', eye: '#ffd700' }, glow: '#ffd700' },
+            { id: 'nebula', name: 'Nebula Emperor', cost: 750000, colors: { body: '#0d0221', accent: '#ff007f', eye: '#00f0ff' }, glow: '#ff007f' },
+            { id: 'quantum', name: "Schrödinger's Dino", cost: 900000, colors: { body: '#008080', accent: '#800080', eye: '#ffffff' }, glow: '#800080', alpha: 0.92 },
+            { id: 'singularity', name: 'The Singularity', cost: 1200000, colors: { body: '#000000', accent: '#00ffff', eye: '#ffffff' }, glow: '#00ffff' },
+            { id: 'genesis', name: 'World Tree Genesis', cost: 1800000, colors: { body: '#1e3f20', accent: '#ffd700', eye: '#00ff88' }, glow: '#ffd700' },
+            { id: 'wireframe', name: 'The Architect', cost: 2500000, colors: { body: '#001100', accent: '#00ff00', eye: '#ffffff' }, glow: '#00ff00' },
+            { id: 'realityweaver', name: 'Reality Weaver', cost: 4000000, colors: { body: '#2a003f', accent: '#ff0055', eye: '#00ffff' }, glow: '#ff0055' },
+            { id: 'omnigod', name: 'Omni-God', cost: 6500000, colors: { body: '#e6e6fa', accent: '#8a2be2', eye: '#ffd700' }, glow: '#8a2be2' },
+            { id: 'developer', name: 'The Developer', cost: 10000000, colors: { body: '#000000', accent: '#39ff14', eye: '#ff0000' }, glow: '#39ff14' }
+        ];
+
+        /* =========================================================================
+         * TRAILS
+         * ========================================================================= */
+        const TRAILS = [
+    { id: 'none', name: 'No Trail', tier: 'None', cost: 0, colors: null },
+    { id: 'dust_trail', name: 'Classic Dust', tier: 'Common', cost: 100, colors: ['#fff5b8', '#ff9a3c'] },
+    { id: 'smoke_plume', name: 'Smokescreen', tier: 'Common', cost: 250, colors: ['#9d4edd', '#3c096c'] },
+    { id: 'sparks', name: 'Spark Trail', tier: 'Common', cost: 500, colors: ['#fff400', '#ff5f1f'] },
+    { id: 'pixel_glitch', name: '8-Bit Glitch', tier: 'Common', cost: 800, colors: ['#39ff14', '#ff00ff'] },
+    { id: 'fire_trail', name: 'Basic Fire', tier: 'Common', cost: 1200, colors: ['#ff3131', '#ffbe0b'] },
+    { id: 'ice_sparkle', name: 'Frost Path', tier: 'Uncommon', cost: 1800, colors: ['#00f5ff', '#7df9ff'] },
+    { id: 'bubble_pop', name: 'Bubbly', tier: 'Uncommon', cost: 2500, colors: ['#00e5ff', '#ff6ec7'] },
+    { id: 'slime_drip', name: 'Toxic Sludge', tier: 'Uncommon', cost: 3500, colors: ['#aaff00', '#00b140'] },
+    { id: 'shadow_step', name: 'Shadow Clone', tier: 'Uncommon', cost: 5000, colors: ['#7b2ff7', '#ff2fd0'] },
+    { id: 'neon_laser', name: 'Laser Grid', tier: 'Uncommon', cost: 7500, colors: ['#ff0055', '#00e5ff'] },
+    { id: 'blood_moon', name: 'Crimson Bats', tier: 'Rare', cost: 10000, colors: ['#ff1053', '#ff4d6d'] },
+    { id: 'lightning_strike', name: 'Thunder Step', tier: 'Rare', cost: 15000, colors: ['#ffff00', '#ffffff'] },
+    { id: 'cherry_blossom', name: 'Sakura Petals', tier: 'Rare', cost: 22000, colors: ['#ff5ca8', '#ff9ecb'] },
+    { id: 'rainbow_road', name: 'Rainbow Dash', tier: 'Rare', cost: 30000, colors: ['#ff003c', '#ff8c00', '#ffee00', '#00ff85', '#00c3ff', '#7b2ff7', '#ff2fd0'] },
+    { id: 'hologram_grid', name: 'Holo-Floor', tier: 'Rare', cost: 40000, colors: ['#00fff2', '#ff00e6'] },
+    { id: 'star_dust', name: 'Cosmic Galaxy', tier: 'Epic', cost: 55000, colors: ['#c77dff', '#ffffff'] },
+    { id: 'binary_code', name: 'Matrix Rain', tier: 'Epic', cost: 75000, colors: ['#39ff14', '#00ff9f'] },
+    { id: 'golden_coins', name: 'Wealth Trail', tier: 'Epic', cost: 100000, colors: ['#ffe135', '#ffb703'] },
+    { id: 'black_hole', name: 'Event Horizon', tier: 'Epic', cost: 150000, colors: ['#000000', '#c77dff'] },
+    { id: 'time_warp', name: 'Chrono Echo', tier: 'Epic', cost: 250000, colors: ['#00e5ff', '#ffd700'] },
+    { id: 'supernova', name: 'Solar Flare', tier: 'Mythic', cost: 400000, colors: ['#ff4500', '#ffffff'] },
+    { id: 'void_rift', name: 'Dimensional Tear', tier: 'Mythic', cost: 650000, colors: ['#8a2be2', '#00ffff'] },
+    { id: 'omni_energy', name: 'God Aura', tier: 'Mythic', cost: 1000000, colors: ['#ffea00', '#ff6d00'] },
+    { id: 'reality_shatter', name: 'Fourth Wall', tier: 'Mythic', cost: 2000000, colors: ['#ff2079', '#00fff2'] },
+    { id: 'dev_console', name: 'Root Access', tier: 'Mythic', cost: 5000000, colors: ['#0d1b0d', '#5cff6b'] }
 ];
+
         /* =========================================================================
          * SAVE SYSTEM & AUDIO & UTILS
          * ========================================================================= */
         const SAVE_KEY = 'dinoRunSaveV1';
-        let saveData = { highScore: 0, coins: 0, unlockedSkins: ['classic'], equippedSkin: 'classic', muted: false };
+        let saveData = { highScore: 0, coins: 0, unlockedSkins: ['classic'], equippedSkin: 'classic', unlockedTrails: ['none'], equippedTrail: 'none', muted: false };
 
         function loadSave() {
             try {
@@ -358,9 +364,15 @@
                         saveData.unlockedSkins.push('classic');
                     }
                     if (!SKINS.find(s => s.id === saveData.equippedSkin)) saveData.equippedSkin = 'classic';
+                    if (!Array.isArray(saveData.unlockedTrails) || !saveData.unlockedTrails.includes('none')) {
+                        saveData.unlockedTrails = Array.isArray(saveData.unlockedTrails) ? saveData.unlockedTrails : [];
+                        saveData.unlockedTrails.push('none');
+                    }
+                    if (!TRAILS.find(t => t.id === saveData.equippedTrail)) saveData.equippedTrail = 'none';
                 }
             } catch (err) {}
         }
+        
         function persistSave() {
             try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData)); } catch (err) {}
         }
@@ -426,6 +438,9 @@
             };
         })();
 
+        /* =========================================================================
+         * ENVIRONMENT & COLOR MATRIX
+         * ========================================================================= */
         const PALETTE = {
             day:   { skyTop: '#eaf6ff', skyBottom: '#ffffff', ground: '#eeeeee', groundLine: '#c7c7c7', entity: '#535353', cloud: '#d5d5d5', obstacle: '#3a0d0d' },
             night: { skyTop: '#0b1130', skyBottom: '#1c2350', ground: '#2c3049', groundLine: '#4a4f72', entity: '#e7e9f5', cloud: '#4b5075', obstacle: '#ff6f3c' }
@@ -513,28 +528,548 @@
             }
         }
 
-        let floatingTexts = [];
-        function spawnFloatingText(x, y, text, color) { floatingTexts.push({ x, y, text, color, life: 40, maxLife: 40 }); }
-        function updateAndDrawFloatingTexts() {
-            ctx.font = '10px "Press Start 2P", monospace';
-            ctx.textAlign = 'center';
-            for (let i = floatingTexts.length - 1; i >= 0; i--) {
-                const t = floatingTexts[i];
-                t.y -= 0.8; t.life--;
-                ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
-                ctx.fillStyle = t.color;
-                ctx.fillText(t.text, t.x, t.y);
-                if (t.life <= 0) floatingTexts.splice(i, 1);
+        /* =========================================================================
+         * OVERHAULED HIGH-IMPACT TRAIL PARTICLE ENGINE
+         * ========================================================================= */
+        function getEquippedTrail() { return TRAILS.find(t => t.id === saveData.equippedTrail) || TRAILS[0]; }
+
+        const TRAIL_SPAWN_RATE = {
+    dust_trail: 1, smoke_plume: 1, sparks: 1, pixel_glitch: 1, fire_trail: 1,
+    ice_sparkle: 1, bubble_pop: 1, slime_drip: 1, shadow_step: 2, neon_laser: 1,
+    blood_moon: 1, lightning_strike: 2, cherry_blossom: 1, rainbow_road: 1, hologram_grid: 1,
+    star_dust: 1, binary_code: 1, golden_coins: 1, black_hole: 1, time_warp: 2,
+    supernova: 3, void_rift: 1, omni_energy: 1, reality_shatter: 2, dev_console: 1
+};
+// Stratified spawn-position tuning: vertical bands splitting the Dino's trailing edge (dino.y -> dino.y + dino.h)
+const TRAIL_EDGE_BANDS = 4;
+let trailEdgeIndex = 0; // round-robin cursor through the bands above
+// Hard safety cap on concurrent trail particles so the 2.5-3x lifespan boost below can never runaway/stutter
+const MAX_TRAIL_PARTICLES = 320;
+        const DEV_CONSOLE_LOGS = ['// EXEC_RUN', 'dino.y--', 'if (jump) run()', 'coins += 1', 'sys.ok()', 'obstacle.dodge()'];
+// Tuning constants for the overhauled trail engine — lifespans 2.5-3x, sizes up slightly, less drag/shrink so trails linger
+const TRAIL_LIFE_MULTIPLIER = 2.75;
+const TRAIL_SIZE_MULTIPLIER = 1.18;
+const TRAIL_DRAG_SOFTEN = 0.45;
+        class TrailParticle {
+            constructor(type, x, y, colors, opts = {}) {
+    this.type = type; this.x = x; this.y = y; this.colors = colors || ['#ffffff', '#cccccc'];
+    this.vx = opts.vx ?? 0; this.vy = opts.vy ?? 0;
+    this.size = (opts.size ?? 10) * TRAIL_SIZE_MULTIPLIER; this.startSize = this.size;
+    this.life = Math.round((opts.life ?? 25) * TRAIL_LIFE_MULTIPLIER); this.maxLife = this.life;
+    this.angle = opts.angle ?? 0; this.vrot = opts.vrot ?? 0;
+    const rawGrow = opts.grow ?? 0;
+    // Slow the size-change rate so particles keep a full, graceful silhouette across their much longer life
+    this.grow = rawGrow * (rawGrow < 0 ? 0.18 : 0.4);
+    const rawDrag = opts.drag ?? 1;
+    // Soften drag toward 1 (less friction) so particles decelerate slower and stretch further behind the Dino
+    this.drag = rawDrag >= 1 ? rawDrag : 1 - (1 - rawDrag) * TRAIL_DRAG_SOFTEN;
+    this.seed = Math.random() * Math.PI * 2;
+    this.data = opts.data || {};
+}
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                this.vx *= this.drag; this.vy *= this.drag;
+                this.angle += this.vrot;
+                this.size = Math.max(0, this.size + this.grow);
+                switch (this.type) {
+                    case 'dust_trail': this.vy -= 0.015; break;
+                    case 'smoke_plume': this.vy -= 0.04; break;
+                    case 'sparks': this.vy += 0.18; break;
+                    case 'fire_trail': this.vy -= 0.22; break;
+                    case 'ice_sparkle': this.vy += 0.05; break;
+                    case 'bubble_pop': this.x += Math.sin(frames * 0.2 + this.seed) * 0.4; break;
+                    case 'slime_drip':
+                        if (!this.data.stuck) {
+                            this.vy += 0.4;
+                            if (this.y >= GROUND_Y - 2) { this.y = GROUND_Y - 2; this.vy = 0; this.vx = 0; this.data.stuck = true; this.life = Math.max(this.life, 40); this.grow = 0; }
+                        }
+                        break;
+                    case 'blood_moon': this.y = this.data.baseY + Math.sin(frames * 0.15 + this.seed) * 8; break;
+                    case 'cherry_blossom': this.x += Math.sin(frames * 0.1 + this.seed) * 0.6; this.vy += 0.012; break;
+                    case 'golden_coins':
+                        this.vy += 0.3;
+                        if (this.y >= GROUND_Y - 2 && !this.data.bounced) { this.vy = -Math.abs(this.vy) * 0.55; this.data.bounced = true; }
+                        break;
+                    case 'black_hole': this.data.orbitAngle = (this.data.orbitAngle || 0) + 0.12; break;
+                    case 'void_rift': this.data.swirl = (this.data.swirl || 0) + 0.09; break;
+                    case 'omni_energy': if (this.data.wing) this.size = Math.max(0, this.size - this.startSize * 0.025); break;
+                    case 'reality_shatter': if (this.data.shard) this.vy += 0.08; break;
+                    default: break;
+                }
+                this.life--;
             }
-            ctx.globalAlpha = 1; ctx.textAlign = 'start';
+            drawContrastHalo(c) {
+    // Dynamic contrast pass: keeps every trail readable against BOTH the light day sky and the dark night sky.
+    const haloAlpha = Math.max(0, this.life / this.maxLife) * 0.3;
+    if (haloAlpha <= 0) return;
+    const cx = (this.data && this.data.w) ? this.x + this.data.w / 2 : this.x;
+    const cy = (this.data && this.data.h) ? this.y + this.data.h / 2 : this.y;
+    const r = (this.data && this.data.w) ? Math.max(this.data.w, this.data.h) * 0.65 : this.size * 1.15;
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = haloAlpha;
+    const haloColor = isSceneDark ? 'rgba(255,255,255,0.9)' : 'rgba(6,8,20,0.55)';
+    const grad = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, haloColor);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = grad;
+    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.fill();
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+draw(targetCtx = ctx) {
+    const c = targetCtx;
+    const alpha = Math.max(0, this.life / this.maxLife);
+    c.save();
+    this.drawContrastHalo(c);
+    switch (this.type) {
+                    case 'dust_trail': {
+                        c.globalAlpha = alpha * 0.55;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, hexToRgba(this.colors[this.data.ci % this.colors.length], 0.9));
+                        grad.addColorStop(1, hexToRgba(this.colors[this.data.ci % this.colors.length], 0));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'smoke_plume': {
+                        c.globalAlpha = alpha * 0.4;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, hexToRgba(this.colors[0], 0.55));
+                        grad.addColorStop(0.6, hexToRgba(this.colors[1], 0.35));
+                        grad.addColorStop(1, hexToRgba(this.colors[1], 0));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'sparks': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha;
+                        const col = this.colors[this.data.ci % this.colors.length];
+                        const stretch = Math.max(6, Math.min(28, Math.hypot(this.vx, this.vy) * 2.2));
+                        const ang = Math.atan2(this.vy, this.vx || -0.001);
+                        const tailX = this.x - Math.cos(ang) * stretch;
+                        const tailY = this.y - Math.sin(ang) * stretch;
+                        const grad = c.createLinearGradient(this.x, this.y, tailX, tailY);
+                        grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.4, hexToRgba(col, 0.9)); grad.addColorStop(1, hexToRgba(col, 0));
+                        c.strokeStyle = grad; c.lineWidth = this.size * 0.35; c.lineCap = 'round';
+                        c.beginPath(); c.moveTo(this.x, this.y); c.lineTo(tailX, tailY); c.stroke();
+                        c.globalAlpha = alpha; c.fillStyle = '#ffffff';
+                        c.beginPath(); c.arc(this.x, this.y, this.size * 0.22, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'pixel_glitch': {
+                        c.globalAlpha = alpha;
+                        const jitterY = (Math.random() - 0.5) * 10;
+                        c.fillStyle = hexToRgba(this.colors[0], 0.55);
+                        c.fillRect(this.x - 2, this.y + jitterY, this.size, this.size * 0.6);
+                        c.fillStyle = this.colors[Math.floor(frames / 2) % this.colors.length];
+                        c.fillRect(this.x, this.y + jitterY, this.size, this.size * 0.6);
+                        c.fillStyle = hexToRgba(this.colors[1], 0.55);
+                        c.fillRect(this.x + 2, this.y + jitterY, this.size, this.size * 0.6);
+                        break;
+                    }
+                    case 'fire_trail': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha;
+                        const s = this.size;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, s);
+                        grad.addColorStop(0, hexToRgba('#fff6c9', 0.95));
+                        grad.addColorStop(0.35, hexToRgba(this.colors[this.data.ci % this.colors.length], 0.9));
+                        grad.addColorStop(1, hexToRgba(this.colors[1], 0));
+                        c.fillStyle = grad;
+                        c.beginPath();
+                        c.moveTo(this.x, this.y - s);
+                        c.quadraticCurveTo(this.x + s * 0.7, this.y - s * 0.2, this.x, this.y + s * 0.6);
+                        c.quadraticCurveTo(this.x - s * 0.7, this.y - s * 0.2, this.x, this.y - s);
+                        c.fill();
+                        break;
+                    }
+                    case 'ice_sparkle': {
+                        c.globalAlpha = alpha; c.translate(this.x, this.y); c.rotate(this.angle);
+                        const grad = c.createRadialGradient(0, 0, 0, 0, 0, this.size);
+                        grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, this.colors[1]); grad.addColorStop(1, hexToRgba(this.colors[0], 0));
+                        c.fillStyle = grad;
+                        c.beginPath();
+                        c.moveTo(0, -this.size); c.lineTo(this.size * 0.28, 0); c.lineTo(0, this.size); c.lineTo(-this.size * 0.28, 0); c.closePath(); c.fill();
+                        c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1;
+                        c.beginPath(); c.moveTo(-this.size * 0.6, 0); c.lineTo(this.size * 0.6, 0); c.stroke();
+                        break;
+                    }
+                    case 'bubble_pop': {
+                        c.globalAlpha = alpha * 0.85;
+                        const grad = c.createRadialGradient(this.x - this.size * 0.3, this.y - this.size * 0.3, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                        grad.addColorStop(0.4, hexToRgba(this.colors[0], 0.25));
+                        grad.addColorStop(1, hexToRgba(this.colors[0], 0.05));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        c.strokeStyle = hexToRgba(this.colors[this.data.ci % this.colors.length], 0.8); c.lineWidth = 1.5;
+                        c.stroke();
+                        break;
+                    }
+                    case 'slime_drip': {
+                        c.globalAlpha = this.data.stuck ? alpha * 0.65 : alpha;
+                        const grad = c.createRadialGradient(this.x - 2, this.y - 2, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, hexToRgba('#ffffff', 0.6));
+                        grad.addColorStop(0.3, hexToRgba(this.colors[this.data.ci % this.colors.length], 0.95));
+                        grad.addColorStop(1, hexToRgba(this.colors[1], 0.9));
+                        c.fillStyle = grad;
+                        if (c.roundRect) { c.beginPath(); c.roundRect(this.x - this.size * 0.35, this.y, this.size * 0.7, this.size * 1.5, this.size * 0.35); c.fill(); }
+                        else { c.fillRect(this.x - this.size * 0.35, this.y, this.size * 0.7, this.size * 1.5); }
+                        break;
+                    }
+                    case 'shadow_step': {
+                        c.globalAlpha = alpha * 0.45;
+                        c.fillStyle = this.colors[this.data.ci % this.colors.length];
+                        c.fillRect(this.x, this.y, this.data.w, this.data.h);
+                        c.globalAlpha = alpha * 0.2;
+                        c.fillStyle = this.colors[1];
+                        c.fillRect(this.x - 3, this.y - 3, this.data.w + 6, this.data.h + 6);
+                        break;
+                    }
+                    case 'neon_laser': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha;
+                        const col = this.colors[this.data.ci % this.colors.length];
+                        c.strokeStyle = hexToRgba(col, 0.35); c.lineWidth = this.size * 0.5; c.lineCap = 'round';
+                        c.beginPath(); c.moveTo(this.x - this.size, this.y); c.lineTo(this.x + this.size, this.y + this.size); c.moveTo(this.x - this.size, this.y + this.size); c.lineTo(this.x + this.size, this.y); c.stroke();
+                        c.strokeStyle = '#ffffff'; c.lineWidth = this.size * 0.15;
+                        c.beginPath(); c.moveTo(this.x - this.size, this.y); c.lineTo(this.x + this.size, this.y + this.size); c.moveTo(this.x - this.size, this.y + this.size); c.lineTo(this.x + this.size, this.y); c.stroke();
+                        break;
+                    }
+                    case 'blood_moon': {
+                        c.globalAlpha = alpha; c.translate(this.x, this.y);
+                        const flap = Math.sin(frames * 0.4 + this.seed) * 0.4;
+                        c.fillStyle = this.colors[this.data.ci % this.colors.length];
+                        c.beginPath();
+                        c.moveTo(0, 0);
+                        c.quadraticCurveTo(-this.size * 0.7, -this.size * (0.5 + flap), -this.size * 1.1, 0);
+                        c.quadraticCurveTo(-this.size * 0.4, this.size * 0.15, 0, 0);
+                        c.quadraticCurveTo(this.size * 0.4, this.size * 0.15, this.size * 1.1, 0);
+                        c.quadraticCurveTo(this.size * 0.7, -this.size * (0.5 + flap), 0, 0);
+                        c.fill();
+                        break;
+                    }
+                    case 'lightning_strike': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha;
+                        const col = this.colors[this.data.ci % this.colors.length];
+                        let ly = this.y, lx = this.x; const pts = [[lx, ly]];
+                        for (let i = 0; i < 5; i++) { ly += this.size * 0.5; lx += (Math.random() - 0.5) * this.size * 0.7; pts.push([lx, ly]); }
+                        c.strokeStyle = hexToRgba(col, 0.4); c.lineWidth = 6; c.lineJoin = 'round';
+                        c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => c.lineTo(p[0], p[1])); c.stroke();
+                        c.strokeStyle = '#ffffff'; c.lineWidth = 2.5;
+                        c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(p => c.lineTo(p[0], p[1])); c.stroke();
+                        break;
+                    }
+                    case 'cherry_blossom': {
+                        c.globalAlpha = alpha; c.translate(this.x, this.y); c.rotate(this.angle);
+                        const grad = c.createRadialGradient(0, 0, 0, 0, 0, this.size * 0.7);
+                        grad.addColorStop(0, this.colors[1]); grad.addColorStop(1, hexToRgba(this.colors[0], 0.85));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.ellipse(0, 0, this.size * 0.65, this.size * 0.4, 0, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'rainbow_road': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha * 0.5;
+                        c.fillStyle = this.colors[0];
+                        c.fillRect(this.x, this.y - this.size * 0.5, this.size * 1.6, this.size * 1.3);
+                        c.globalAlpha = alpha;
+                        c.fillRect(this.x, this.y - this.size * 0.15, this.size * 1.6, this.size * 0.35);
+                        break;
+                    }
+                    case 'hologram_grid': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha * 0.6;
+                        c.strokeStyle = this.colors[this.data.ci % this.colors.length]; c.lineWidth = 2.5;
+                        c.beginPath(); c.moveTo(this.x, GROUND_Y); c.lineTo(this.x + this.data.skew, GROUND_Y - this.size); c.stroke();
+                        c.globalAlpha = alpha * 0.2; c.lineWidth = 6;
+                        c.beginPath(); c.moveTo(this.x, GROUND_Y); c.lineTo(this.x + this.data.skew, GROUND_Y - this.size); c.stroke();
+                        break;
+                    }
+                    case 'star_dust': {
+                        if (this.data.isStar) {
+                            c.globalCompositeOperation = 'lighter';
+                            c.globalAlpha = alpha * (0.6 + 0.4 * Math.sin(frames * 0.3 + this.seed));
+                            const s = this.size * 0.5;
+                            c.fillStyle = '#ffffff';
+                            c.beginPath();
+                            c.moveTo(this.x, this.y - s); c.lineTo(this.x + s * 0.25, this.y - s * 0.25);
+                            c.lineTo(this.x + s, this.y); c.lineTo(this.x + s * 0.25, this.y + s * 0.25);
+                            c.lineTo(this.x, this.y + s); c.lineTo(this.x - s * 0.25, this.y + s * 0.25);
+                            c.lineTo(this.x - s, this.y); c.lineTo(this.x - s * 0.25, this.y - s * 0.25);
+                            c.closePath(); c.fill();
+                        } else {
+                            c.globalAlpha = alpha * 0.22;
+                            const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                            grad.addColorStop(0, hexToRgba(this.colors[0], 0.7));
+                            grad.addColorStop(1, hexToRgba(this.colors[0], 0));
+                            c.fillStyle = grad;
+                            c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        }
+                        break;
+                    }
+                    case 'binary_code': {
+                        c.globalAlpha = alpha; c.font = `bold ${Math.round(this.size)}px monospace`; c.textAlign = 'center';
+                        c.shadowColor = this.colors[0]; c.shadowBlur = 8;
+                        c.fillStyle = this.colors[this.data.ci % this.colors.length];
+                        c.fillText(this.data.char, this.x, this.y);
+                        c.shadowBlur = 0;
+                        c.globalAlpha = alpha * 0.3;
+                        c.fillText(this.data.char, this.x, this.y - 10);
+                        break;
+                    }
+                    case 'golden_coins': {
+                        c.globalAlpha = alpha;
+                        const flip = Math.abs(Math.cos(this.angle));
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size * 0.6);
+                        grad.addColorStop(0, '#fff6c9'); grad.addColorStop(0.5, this.colors[this.data.ci % this.colors.length]); grad.addColorStop(1, this.colors[1]);
+                        c.fillStyle = grad;
+                        c.beginPath(); c.ellipse(this.x, this.y, Math.max(1.5, flip * this.size * 0.5), this.size * 0.5, 0, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'black_hole': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha * 0.6;
+                        const grad = c.createRadialGradient(this.x, this.y, this.size * 0.3, this.x, this.y, this.size * 1.6);
+                        grad.addColorStop(0, hexToRgba(this.colors[1], 0.7));
+                        grad.addColorStop(1, hexToRgba(this.colors[1], 0));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.ellipse(this.x, this.y, this.size * 1.6, this.size * 0.6, this.data.orbitAngle || 0, 0, Math.PI * 2); c.fill();
+                        c.globalCompositeOperation = 'source-over'; c.globalAlpha = alpha;
+                        c.fillStyle = this.colors[0];
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        for (let i = 0; i < 3; i++) {
+                            const a = (this.data.orbitAngle || 0) + i * (Math.PI * 2 / 3);
+                            const dx = this.x + Math.cos(a) * this.size * 1.5;
+                            const dy = this.y + Math.sin(a) * this.size * 0.55;
+                            c.globalAlpha = alpha * 0.8; c.fillStyle = this.colors[1];
+                            c.beginPath(); c.arc(dx, dy, this.size * 0.12, 0, Math.PI * 2); c.fill();
+                        }
+                        break;
+                    }
+                    case 'time_warp': {
+                        c.globalAlpha = alpha * 0.5; c.strokeStyle = this.colors[this.data.ci % this.colors.length]; c.setLineDash([4, 4]); c.lineWidth = 2;
+                        c.strokeRect(this.x, this.y, this.data.w, this.data.h); c.setLineDash([]);
+                        c.globalAlpha = alpha * 0.25; c.lineWidth = 1;
+                        c.beginPath(); c.arc(this.x + this.data.w / 2, this.y + this.data.h / 2, this.data.w * 0.7 + (this.maxLife - this.life), 0, Math.PI * 2); c.stroke();
+                        break;
+                    }
+                    case 'supernova': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, '#ffffff');
+                        grad.addColorStop(0.3, hexToRgba(this.colors[this.data.ci % this.colors.length], 0.9));
+                        grad.addColorStop(1, hexToRgba(this.colors[1] || this.colors[0], 0));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'void_rift': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha * 0.5;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, hexToRgba(this.colors[1], 0.6));
+                        grad.addColorStop(1, hexToRgba(this.colors[0], 0));
+                        c.fillStyle = grad;
+                        c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        c.globalCompositeOperation = 'source-over'; c.globalAlpha = alpha;
+                        c.strokeStyle = this.colors[0]; c.lineWidth = 2;
+                        c.beginPath(); c.arc(this.x, this.y, this.size * 0.55, this.data.swirl || 0, (this.data.swirl || 0) + Math.PI * 1.4); c.stroke();
+                        c.fillStyle = '#000000';
+                        c.beginPath(); c.arc(this.x, this.y, this.size * 0.3, 0, Math.PI * 2); c.fill();
+                        break;
+                    }
+                    case 'omni_energy': {
+                        c.globalCompositeOperation = 'lighter'; c.globalAlpha = alpha * 0.55;
+                        const grad = c.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+                        grad.addColorStop(0, this.colors[1]); grad.addColorStop(0.5, hexToRgba(this.colors[1], 0.4)); grad.addColorStop(1, 'rgba(255,255,255,0)');
+                        c.fillStyle = grad; c.beginPath(); c.arc(this.x, this.y, this.size, 0, Math.PI * 2); c.fill();
+                        if (this.data.wing) {
+                            c.globalAlpha = alpha * 0.85; c.fillStyle = hexToRgba(this.colors[0], 0.9);
+                            c.beginPath(); c.ellipse(this.x, this.y, this.size * 1.5, this.size * 0.55, this.data.wingSide * 0.5, 0, Math.PI * 2); c.fill();
+                        }
+                        break;
+                    }
+                    case 'reality_shatter': {
+                        c.globalAlpha = alpha;
+                        if (this.data.shard) {
+                            c.translate(this.x, this.y); c.rotate(this.angle);
+                            c.fillStyle = this.colors[0];
+                            c.beginPath(); c.moveTo(0, -this.size * 0.6); c.lineTo(this.size * 0.5, this.size * 0.5); c.lineTo(-this.size * 0.5, this.size * 0.5); c.closePath(); c.fill();
+                            c.strokeStyle = 'rgba(255,255,255,0.6)'; c.lineWidth = 1; c.stroke();
+                        } else {
+                            c.strokeStyle = this.colors[1]; c.lineWidth = 2.5;
+                            c.beginPath(); c.moveTo(this.x, this.y); c.lineTo(this.x + this.data.dx1, this.y + this.data.dy1); c.lineTo(this.x + this.data.dx2, this.y + this.data.dy2); c.stroke();
+                            c.globalAlpha = alpha * 0.6; c.fillStyle = '#ffffff';
+                            c.beginPath(); c.arc(this.x, this.y, 2.5, 0, Math.PI * 2); c.fill();
+                        }
+                        break;
+                    }
+                    case 'dev_console': {
+                        c.globalAlpha = alpha; c.font = `bold ${Math.round(this.size)}px monospace`; c.textAlign = 'left';
+                        c.shadowColor = this.colors[1]; c.shadowBlur = 10;
+                        c.fillStyle = this.colors[1];
+                        c.fillText(this.data.text, this.x, this.y);
+                        c.shadowBlur = 0;
+                        c.globalAlpha = alpha * 0.35;
+                        c.fillText(this.data.text, this.x, this.y - 12);
+                        break;
+                    }
+                }
+                c.restore(); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+            }
+            get dead() { return this.life <= 0 || this.size <= 0; }
         }
 
-        let shakeDuration = 0, shakeMagnitude = 0;
-        function triggerShake(magnitude, duration) { shakeMagnitude = Math.max(shakeMagnitude, magnitude); shakeDuration = Math.max(shakeDuration, duration); }
-        function applyShake() {
-            if (shakeDuration > 0) {
-                ctx.translate((Math.random() - 0.5) * shakeMagnitude, (Math.random() - 0.5) * shakeMagnitude);
-                shakeDuration--; shakeMagnitude *= 0.92;
+        let trailParticles = [];
+        function spawnTrailParticle(type, x, y) {
+            const trail = getEquippedTrail(); const colors = trail.colors || ['#ffffff', '#cccccc'];
+            const ci = () => Math.floor(Math.random() * colors.length);
+            switch (type) {
+                case 'dust_trail':
+                    for (let i = 0; i < 2; i++) {
+                        trailParticles.push(new TrailParticle('dust_trail', x + (Math.random() - 0.5) * 6, y + (Math.random() - 0.5) * 4, colors, {
+                            vx: -gameSpeed * (0.3 + Math.random() * 0.2), vy: -0.3 - Math.random() * 0.4,
+                            size: 10 + Math.random() * 8, grow: 0.25, life: 22, drag: 0.97, data: { ci: ci() }
+                        }));
+                    }
+                    break;
+                case 'smoke_plume':
+                    trailParticles.push(new TrailParticle('smoke_plume', x, y, colors, {
+                        vx: -gameSpeed * 0.22, vy: -0.5, size: 14 + Math.random() * 7, grow: 0.45, life: 45, drag: 0.98, data: { ci: ci() }
+                    }));
+                    break;
+                case 'sparks':
+                    for (let i = 0; i < 2; i++) {
+                        const a = Math.PI + (Math.random() - 0.5) * 1.2;
+                        const sp = gameSpeed * 1.4 + Math.random() * 4;
+                        trailParticles.push(new TrailParticle('sparks', x, y, colors, {
+                            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6 - 1, size: 12 + Math.random() * 6, life: 14, drag: 0.9, data: { ci: ci() }
+                        }));
+                    }
+                    break;
+                case 'pixel_glitch':
+                    trailParticles.push(new TrailParticle('pixel_glitch', x, y, colors, { vx: -gameSpeed * 0.5, size: 11 + Math.random() * 8, life: 6, data: {} }));
+                    break;
+                case 'fire_trail':
+                    for (let i = 0; i < 3; i++) {
+                        trailParticles.push(new TrailParticle('fire_trail', x + (Math.random() - 0.5) * 6, y, colors, {
+                            vx: -gameSpeed * 0.4 + (Math.random() - 0.5) * 1.5, vy: -0.6 - Math.random() * 0.6,
+                            size: 18 + Math.random() * 12, grow: -0.15, life: 18, drag: 0.95, data: { ci: ci() }
+                        }));
+                    }
+                    break;
+                case 'ice_sparkle':
+                    trailParticles.push(new TrailParticle('ice_sparkle', x, y, colors, {
+                        vx: -gameSpeed * 0.3, vy: 0.5, size: 15 + Math.random() * 8, vrot: 0.06, life: 32, data: {}
+                    }));
+                    break;
+                case 'bubble_pop':
+                    trailParticles.push(new TrailParticle('bubble_pop', x, y, colors, {
+                        vx: -gameSpeed * 0.2, vy: -0.8, size: 12 + Math.random() * 8, grow: 0.2, life: 38, data: { ci: ci() }
+                    }));
+                    break;
+                case 'slime_drip':
+                    trailParticles.push(new TrailParticle('slime_drip', x, GROUND_Y - 20, colors, {
+                        vx: -gameSpeed * 0.35, size: 14 + Math.random() * 8, grow: 0.04, life: 28, data: { ci: ci(), stuck: false }
+                    }));
+                    break;
+                case 'shadow_step':
+                    if (!dino.grounded) trailParticles.push(new TrailParticle('shadow_step', dino.x, dino.y, colors, {
+                        vx: -gameSpeed * 0.2, life: 22, data: { ci: ci(), w: dino.w * 1.1, h: dino.h * 1.1 }
+                    }));
+                    break;
+                case 'neon_laser':
+                    trailParticles.push(new TrailParticle('neon_laser', x, GROUND_Y - 15, colors, {
+                        vx: -gameSpeed * 0.4, size: 20 + Math.random() * 8, life: 16, data: { ci: ci() }
+                    }));
+                    break;
+                case 'blood_moon':
+                    trailParticles.push(new TrailParticle('blood_moon', x, y - 10, colors, {
+                        vx: -(gameSpeed * 0.6 + Math.random() * 2), size: 22 + Math.random() * 8, life: 36, data: { ci: ci(), baseY: y - 10 }
+                    }));
+                    break;
+                case 'lightning_strike':
+                    trailParticles.push(new TrailParticle('lightning_strike', x, GROUND_Y - 24, colors, {
+                        vx: -gameSpeed * 0.3, size: 25 + Math.random() * 12, life: 9, data: { ci: ci() }
+                    }));
+                    break;
+                case 'cherry_blossom':
+                    for (let i = 0; i < 2; i++) {
+                        trailParticles.push(new TrailParticle('cherry_blossom', x + (Math.random() - 0.5) * 10, y - 15 - Math.random() * 10, colors, {
+                            vx: -gameSpeed * 0.3, vy: 0.4, angle: Math.random() * Math.PI * 2, vrot: (Math.random() - 0.5) * 0.15,
+                            size: 20 + Math.random() * 10, grow: 0.05, life: 48, data: { ci: ci() }
+                        }));
+                    }
+                    break;
+                case 'rainbow_road':
+                    colors.forEach((col, idx) => {
+                        trailParticles.push(new TrailParticle('rainbow_road', x, y - 22 + idx * 4, [col], {
+                            vx: -gameSpeed, size: 24 + Math.random() * 6, life: 35, data: {}
+                        }));
+                    });
+                    break;
+                case 'hologram_grid':
+                    trailParticles.push(new TrailParticle('hologram_grid', x, GROUND_Y, colors, {
+                        vx: -gameSpeed, size: 24 + Math.random() * 12, life: 40, data: { ci: ci(), skew: -16 - Math.random() * 12 }
+                    }));
+                    break;
+                case 'star_dust':
+                    trailParticles.push(new TrailParticle('star_dust', x + (Math.random() - 0.5) * 34, y - Math.random() * 34, colors, {
+                        vx: -gameSpeed * 0.3, size: 24 + Math.random() * 14, grow: 0.05, life: 55, data: { isStar: Math.random() > 0.4 }
+                    }));
+                    break;
+                case 'binary_code':
+                    trailParticles.push(new TrailParticle('binary_code', x, y - 22, colors, {
+                        vx: -gameSpeed * 0.4, vy: 0.7, size: 22 + Math.random() * 10, life: 42, data: { ci: ci(), char: Math.random() > 0.5 ? '1' : '0' }
+                    }));
+                    break;
+                case 'golden_coins':
+                    trailParticles.push(new TrailParticle('golden_coins', x, y - 10, colors, {
+                        vx: -gameSpeed * 0.4, vy: -2.4, vrot: 0.3, size: 22 + Math.random() * 10, life: 32, data: { ci: ci(), bounced: false }
+                    }));
+                    break;
+                case 'black_hole':
+                    trailParticles.push(new TrailParticle('black_hole', x, y - 10, colors, {
+                        vx: -gameSpeed * 0.3, size: 32 + Math.random() * 15, grow: -0.08, life: 48, data: {}
+                    }));
+                    break;
+                case 'time_warp':
+                    trailParticles.push(new TrailParticle('time_warp', dino.x, dino.y, colors, {
+                        vx: gameSpeed * 0.5, life: 26, data: { ci: ci(), w: dino.w * 1.15, h: dino.h * 1.15 }
+                    }));
+                    break;
+                case 'supernova': {
+                    for (let i = 0; i < 7; i++) {
+                        const a = Math.random() * Math.PI * 2, sp = 1.2 + Math.random() * 3;
+                        trailParticles.push(new TrailParticle('supernova', x, y, colors, {
+                            vx: Math.cos(a) * sp - gameSpeed * 0.3, vy: Math.sin(a) * sp,
+                            size: 35 + Math.random() * 25, grow: -0.12, life: 60 + Math.random() * 30, drag: 0.95, data: { ci: ci() }
+                        }));
+                    }
+                    break;
+                }
+                case 'void_rift':
+                    for (let i = 0; i < 2; i++) {
+                        trailParticles.push(new TrailParticle('void_rift', x, y - 10 + Math.random() * 24, colors, {
+                            vx: -gameSpeed * 0.3, size: 40 + Math.random() * 20, grow: 0.15, life: 40, data: {}
+                        }));
+                    }
+                    break;
+                case 'omni_energy':
+                    trailParticles.push(new TrailParticle('omni_energy', x, y, colors, {
+                        vx: -gameSpeed * 0.2, size: 40 + Math.random() * 20, life: 26, data: { wing: false }
+                    }));
+                    break;
+                case 'reality_shatter':
+                    if (Math.random() > 0.5) {
+                        trailParticles.push(new TrailParticle('reality_shatter', 20 + Math.random() * (CANVAS_WIDTH - 40), 20 + Math.random() * (GROUND_Y - 40), colors, {
+                            life: 45, data: { shard: false, dx1: (Math.random() - 0.5) * 45, dy1: (Math.random() - 0.5) * 45, dx2: (Math.random() - 0.5) * 45, dy2: (Math.random() - 0.5) * 45 }
+                        }));
+                    } else {
+                        trailParticles.push(new TrailParticle('reality_shatter', x, y, colors, {
+                            vx: -gameSpeed * 0.5, vy: 0.3, vrot: 0.1, size: 30 + Math.random() * 20, life: 44, data: { shard: true }
+                        }));
+                    }
+                    break;
+                case 'dev_console':
+                    trailParticles.push(new TrailParticle('dev_console', x, y - 20 - Math.random() * 24, colors, {
+                        vx: -(gameSpeed + 1.5), size: 20 + Math.random() * 10, life: 65, data: { text: DEV_CONSOLE_LOGS[Math.floor(Math.random() * DEV_CONSOLE_LOGS.length)] }
+                    }));
+                    break;
             }
         }
 
@@ -569,7 +1104,7 @@
         }
         function pulse01(freq, phase) { return 0.5 + 0.5 * Math.sin(((typeof frames !== 'undefined') ? frames : 0) * freq + (phase || 0)); }
         
-        function headAnchor(x, y, w, h, ducking) { return ducking ? { x: x + w * 0.857, y: y + h * 0.15 } : { x: x + w * 0.775, y: y }; }
+        function headAnchor(x, y, w, h, ducking) { return ducking ? { x: x + w * 0.857, y: y + h * 0.15 } : { x: x + w * 0.775, y: y }; headAnchor }
         function eyeAnchor(x, y, w, h, ducking) { return ducking ? { x: x + w * 0.857, y: y + h * 0.31 } : { x: x + w * 0.75, y: y + h * 0.136 }; }
         function tailAnchor(x, y, w, h, ducking) { return ducking ? { x: x + w * 0.05, y: y + h * 0.5 } : { x: x + w * 0.05, y: y + h * 0.55 }; }
         function bodyCenter(x, y, w, h) { return { x: x + w * 0.5, y: y + h * 0.5 }; }
@@ -633,14 +1168,31 @@
         function backInfinityDino(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h); const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, Math.max(w, h) * 0.95); g.addColorStop(0, hexToRgba('#7a5cff', 0.35)); g.addColorStop(0.55, hexToRgba('#ff6ad5', 0.18)); g.addColorStop(1, hexToRgba('#0a0a1a', 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(w, h) * 0.95, 0, Math.PI * 2); ctx.fill(); sparklePoints(ctx, c.x, c.y, Math.max(w, h) * 0.9, 10, 'rgba(255,255,255,0.8)'); orbitDots(ctx, c.x, c.y, Math.max(w, h) * 0.7, 6, 1.4, sc.accent, 0.04); }
         function backGlitchKing(ctx, skin, sc, x, y, w, h) { const f = (typeof frames !== 'undefined') ? frames : 0, jx = ((f % 6) - 3) * 1.4; ctx.globalAlpha = 0.4; ctx.fillStyle = '#ff0044'; ctx.fillRect(x - 3 - jx, y, w, h); ctx.fillStyle = '#00ffe0'; ctx.fillRect(x + 3 + jx, y, w, h); ctx.fillStyle = '#3dff5c'; ctx.fillRect(x, y - jx, w, h); for (let i = 0; i < 4; i++) { if ((f + i * 5) % 9 < 2) { ctx.globalAlpha = 0.3; ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 4, y + (h / 4) * i, w + 8, 2); } } }
 
-        // NEW 25 BACK RENDERERS
+        // Upgraded Advanced Back Renders (Complete and continuous)
         function backSamurai(ctx, skin, sc, x, y, w, h, ducking) { const t = tailAnchor(x, y, w, h, ducking); const bob = pulse01(0.04) * 1.5; ctx.save(); ctx.translate(t.x - 3, t.y + bob); ctx.rotate(-0.35); ctx.fillStyle = sc.body; ctx.fillRect(-1.5, -9, 3, 18); ctx.fillStyle = sc.accent; ctx.fillRect(-1.5, -9, 3, 2.5); ctx.fillRect(-1.5, 6.5, 3, 2.5); ctx.restore(); }
         function backBiolum(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h); for (let i = 0; i < 4; i++) { const p = pulse01(0.05, i * 1.1); ctx.globalAlpha = 0.12 + p * 0.22; ctx.strokeStyle = sc.glow; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x + w * 0.1, y + h * (0.28 + i * 0.16)); ctx.lineTo(x + w * 0.9, y + h * (0.28 + i * 0.16)); ctx.stroke(); } auraGlow(ctx, c.x, c.y, Math.max(w, h) * 0.6, sc.glow, 0.1, 0); }
         function backVampire(ctx, skin, sc, x, y, w, h, ducking) { const c = bodyCenter(x, y, w, h), billow = pulse01(0.05) * 3; drawWingPair(ctx, c.x - w * 0.05, c.y - h * 0.02 + billow * 0.3, w * (1.05 + billow * 0.01), h * 1.15, hexToRgba('#0a0a0a', 0.9), sc.accent); }
         function backFallout(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h), f = (typeof frames !== 'undefined') ? frames : 0; ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(f * 0.02); ctx.globalAlpha = 0.32; ctx.fillStyle = sc.accent; for (let i = 0; i < 3; i++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, Math.max(w, h) * 0.55, -0.28, 0.28); ctx.closePath(); ctx.fill(); } ctx.restore(); for (let i = 0; i < 3; i++) { const drip = pulse01(0.05, i * 2) * 5; ctx.globalAlpha = 0.4; ctx.fillStyle = sc.accent; ctx.beginPath(); ctx.ellipse(x + w * (0.25 + i * 0.25), y + h + drip, 1.6, 2.5 + drip * 0.3, 0, 0, Math.PI * 2); ctx.fill(); } }
         function backAstral(ctx, skin, sc, x, y, w, h) { ctx.globalAlpha = 0.3; ctx.fillStyle = sc.body; ctx.fillRect(x - 6, y, w, h); ctx.globalAlpha = 0.15; ctx.fillRect(x - 12, y, w, h); ctx.globalAlpha = 1; auraGlow(ctx, x + w/2, y + h/2, Math.max(w, h) * 0.7, sc.glow, 0.16, 0); }
         function backSolarFlare(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking); for (let i = 0; i < 3; i++) { const t = pulse01(0.04, i * 2.1); ctx.globalAlpha = 0.4 * (1 - t * 0.5); ctx.strokeStyle = sc.accent; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(head.x - w * 0.3 + i * w * 0.3, head.y + h * 0.2); ctx.quadraticCurveTo(head.x - w * 0.3 + i * w * 0.3 + Math.sin(t * Math.PI * 2) * 8, head.y - h * (0.2 + t * 0.5), head.x - w * 0.3 + i * w * 0.3 + 4, head.y - h * 0.7); ctx.stroke(); } auraGlow(ctx, head.x, head.y, Math.max(w, h) * 0.5, sc.body, 0.24, 0); }
-        function backNecromancer(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h), f = (typeof frames !== 'undefined') ? frames : 0; for (let i = 0; i < 3; i++) { const ang = f * 0.02 + i * (Math.PI * 2 / 3); const sx = c.x + Math.cos(ang) * Math.max(w, h) * 0.65; const sy = c.y + Math.sin(ang) * Math.max(w, h) * 0.35; ctx.globalAlpha = 0.25; auraGlow(ctx, sx, sy, 5, sc.accent, 0.5, 0); ctx.globalAlpha = 0.85; ctx.fillStyle = sc.accent; ctx.beginPath(); ctx.arc(sx, sy, 2.4, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#0a0a0a'; ctx.fillRect(sx - 1.3, sy - 0.6, 0.9, 0.9); ctx.fillRect(sx + 0.4, sy - 0.6, 0.9, 0.9); } }
+        function backNecromancer(ctx, skin, sc, x, y, w, h) {
+            const c = bodyCenter(x, y, w, h), f = (typeof frames !== 'undefined') ? frames : 0;
+            for (let i = 0; i < 3; i++) {
+                const ang = f * 0.02 + i * (Math.PI * 2 / 3);
+                const sx = c.x + Math.cos(ang) * Math.max(w, h) * 0.65;
+                const sy = c.y + Math.sin(ang) * Math.max(w, h) * 0.35;
+                ctx.globalAlpha = 0.25;
+                auraGlow(ctx, sx, sy, 5, sc.accent, 0.5, 0);
+                ctx.globalAlpha = 0.85;
+                ctx.fillStyle = sc.accent;
+                ctx.beginPath();
+                ctx.arc(sx, sy, 2.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#0a0a0a';
+                ctx.fillRect(sx - 1.3, sy - 0.6, 0.9, 0.9);
+                ctx.fillRect(sx + 0.4, sy - 0.6, 0.9, 0.9);
+            }
+        }
         function backPrismatic(ctx, skin, sc, x, y, w, h, ducking) { const t = tailAnchor(x, y, w, h, ducking), f = (typeof frames !== 'undefined') ? frames : 0; for (let i = 0; i < 10; i++) { const hue = (f * 3 + i * 22) % 360, wob = Math.sin(f * 0.08 + i * 0.6) * 2; ctx.globalAlpha = 0.4 * (1 - i / 10); ctx.fillStyle = `hsl(${hue}, 100%, 65%)`; ctx.fillRect(t.x - i * 3, t.y + wob - 1, 3, 2.5); } }
         function backMercury(ctx, skin, sc, x, y, w, h) { const f = (typeof frames !== 'undefined') ? frames : 0; ctx.globalAlpha = 0.5; ctx.fillStyle = sc.body; ctx.beginPath(); ctx.moveTo(x, y + h); for (let i = 0; i <= w; i += 4) { ctx.lineTo(x + i, y + h + Math.sin(f * 0.1 + i * 0.4) * 2); } ctx.lineTo(x + w, y + h + 6); ctx.lineTo(x, y + h + 6); ctx.closePath(); ctx.fill(); }
         function backValkyrie(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h), f = (typeof frames !== 'undefined') ? frames : 0; const flap = Math.cos(f * 0.18); ctx.save(); ctx.translate(c.x - w * 0.05, c.y - h * 0.05); ctx.scale(1, 0.55 + Math.abs(flap) * 0.55); ctx.translate(-(c.x - w * 0.05), -(c.y - h * 0.05)); drawWingPair(ctx, c.x - w * 0.05, c.y - h * 0.05, w * 1.3, h * 1.4, '#f4f4f4', sc.accent); ctx.restore(); }
@@ -660,7 +1212,7 @@
         function backOmniGod(ctx, skin, sc, x, y, w, h) { const c = bodyCenter(x, y, w, h), f = (typeof frames !== 'undefined') ? frames : 0; const planets = [{ r: Math.max(w, h) * 0.6, size: 2.6, color: sc.accent, speed: 0.02 }, { r: Math.max(w, h) * 0.8, size: 2, color: sc.eye, speed: -0.014 }, { r: Math.max(w, h) * 1.0, size: 3.2, color: '#7fd8ff', speed: 0.009 }]; planets.forEach((p, i) => { const ang = f * p.speed + i * 2, px = c.x + Math.cos(ang) * p.r, py = c.y + Math.sin(ang) * p.r * 0.45; ctx.globalAlpha = 0.9; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI * 2); ctx.fill(); const moonAng = f * 0.1 + i; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.arc(px + Math.cos(moonAng) * (p.size + 3), py + Math.sin(moonAng) * (p.size + 3), 0.9, 0, Math.PI * 2); ctx.fill(); }); }
         function backDeveloper(ctx, skin, sc, x, y, w, h, ducking) { const f = (typeof frames !== 'undefined') ? frames : 0, t = tailAnchor(x, y, w, h, ducking); ctx.globalAlpha = 0.75; ctx.fillStyle = sc.accent; ctx.font = '7px monospace'; ['// FLEX', 'dino.godMode()'].forEach((s, i) => { ctx.fillText(s, t.x - 10 - i * 4 - (f * 0.6) % 40, t.y + (i - 0.5) * 10); }); for (let i = 0; i < 10; i++) { const ang = i * 0.9 - f * 0.05, r = Math.max(w, h) * (0.5 + (i % 3) * 0.15); ctx.globalAlpha = 0.5 * (1 - i / 10); ctx.fillStyle = `hsl(${(f * 4 + i * 36) % 360}, 100%, 60%)`; ctx.fillRect(x + w / 2 + Math.cos(ang) * r, y + h / 2 + Math.sin(ang) * r * 0.4, 2, 2); } if ((f % 8) < 2) { ctx.globalAlpha = 0.35; ctx.fillStyle = '#39ff14'; ctx.fillRect(x - 3, y + h * 0.3, w + 6, 1.5); } }
 
-        // --- BACK RENDERER REGISTRY (const declared first) ---
+        // --- BACK RENDERER REGISTRY ---
         const FLAIR_BACK_RENDERERS = {
             ghost: (ctx, skin, sc, x, y, w, h) => auraGlow(ctx, x + w / 2, y + h / 2, Math.max(w, h) * 0.75, sc.glow, 0.18, 0),
             camo: backCamo, retro: backRetro, ninja: backNinja, golden: backGolden, neonglitch: backNeonGlitch,
@@ -670,7 +1222,6 @@
             goldengod: backGoldenGod, chronolord: backChronoLord, infinitydino: backInfinityDino, glitchking: backGlitchKing
         };
 
-        // FIXED: Merge the new skins AFTER FLAIR_BACK_RENDERERS is defined.
         Object.assign(FLAIR_BACK_RENDERERS, {
             samurai: backSamurai, biolum: backBiolum, vampire: backVampire, fallout: backFallout, astral: backAstral,
             solarflare: backSolarFlare, necromancer: backNecromancer, prismatic: backPrismatic, mercury: backMercury,
@@ -712,7 +1263,7 @@
         function frontInfinityDino(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking); ctx.strokeStyle = sc.accent; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(head.x - 3, head.y - 4, 2.6, 0, Math.PI * 2); ctx.moveTo(head.x + 5.6, head.y - 4); ctx.arc(head.x + 3, head.y - 4, 2.6, 0, Math.PI * 2); ctx.stroke(); sparklePoints(ctx, x + w * 0.5, y + h * 0.5, Math.max(w, h) * 0.6, 5, 'rgba(255,255,255,0.7)'); }
         function frontGlitchKing(ctx, skin, sc, x, y, w, h, ducking) { const f = (typeof frames !== 'undefined') ? frames : 0, head = headAnchor(x, y, w, h, ducking); for (let i = 0; i < 5; i++) { const jitter = ((f + i * 3) % 6) - 3; ctx.fillStyle = i % 2 === 0 ? sc.accent : sc.eye; ctx.fillRect(head.x - 10 + i * 5 + jitter * 0.3, head.y - 6 - (i % 2) * 3, 3, 4 + (i % 2) * 3); } for (let i = 0; i < 3; i++) { if ((f + i * 3) % 7 < 2) { ctx.globalAlpha = 0.5; ctx.fillStyle = i % 2 === 0 ? '#ff0044' : '#00ffe0'; ctx.fillRect(x - 3, y + h * (0.25 + i * 0.25), w + 6, 1.5); } } const e = eyeAnchor(x, y, w, h, ducking); ctx.globalAlpha = 1; ctx.fillStyle = sc.eye; ctx.beginPath(); ctx.arc(e.x, e.y, 2.6, 0, Math.PI * 2); ctx.fill(); }
 
-        // NEW 25 FRONT RENDERERS
+        // Upgraded Advanced Front Renders
         function frontSamurai(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking); ctx.fillStyle = sc.accent; ctx.beginPath(); ctx.arc(head.x + 2, head.y - 7, 6, Math.PI * 0.15, Math.PI * 1.1, false); ctx.arc(head.x + 2, head.y - 5, 4, Math.PI * 1.1, Math.PI * 0.15, true); ctx.closePath(); ctx.fill(); }
         function frontBiolum(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking), bob = pulse01(0.05) * 3, lx = head.x + 5, ly = head.y - 8 - bob; ctx.strokeStyle = sc.accent; ctx.lineWidth = 1; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.moveTo(head.x + 2, head.y - 2); ctx.quadraticCurveTo(head.x + 6, head.y - 6, lx, ly); ctx.stroke(); auraGlow(ctx, lx, ly, 4 + pulse01(0.05) * 2, sc.glow, 0.9, 0); ctx.globalAlpha = 1; ctx.fillStyle = sc.glow; ctx.beginPath(); ctx.arc(lx, ly, 1.4, 0, Math.PI * 2); ctx.fill(); }
         function frontVampire(ctx, skin, sc, x, y, w, h, ducking) { const e = eyeAnchor(x, y, w, h, ducking); ctx.fillStyle = sc.accent; ctx.beginPath(); ctx.moveTo(e.x - 2, e.y + 3); ctx.lineTo(e.x - 1, e.y + 7); ctx.lineTo(e.x, e.y + 3); ctx.fill(); ctx.beginPath(); ctx.moveTo(e.x + 1.5, e.y + 3); ctx.lineTo(e.x + 2.5, e.y + 7); ctx.lineTo(e.x + 3.5, e.y + 3); ctx.fill(); }
@@ -739,8 +1290,7 @@
         function frontOmniGod(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking); drawCrown(ctx, head.x, head.y - 3, ducking ? 0.4 : 0.58, '#c9c9e8', '#ff2b4d'); ctx.fillStyle = sc.accent; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(head.x, head.y - 8, 5, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
         function frontDeveloper(ctx, skin, sc, x, y, w, h, ducking) { const head = headAnchor(x, y, w, h, ducking); drawCrown(ctx, head.x, head.y - 3, ducking ? 0.42 : 0.6, '#ffd700', sc.accent); const e = eyeAnchor(x, y, w, h, ducking); ctx.strokeStyle = sc.eye; ctx.lineWidth = 1; ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + w * 0.55, e.y - h * 0.08); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + w * 0.5, e.y + h * 0.1); ctx.stroke(); ctx.globalAlpha = 1; ctx.fillStyle = sc.eye; ctx.beginPath(); ctx.arc(e.x, e.y, 1.6, 0, Math.PI * 2); ctx.fill(); }
 
-
-        // --- FRONT RENDERER REGISTRY (const declared first) ---
+        // --- FRONT RENDERER REGISTRY ---
         const FLAIR_FRONT_RENDERERS = {
             cyber: frontCyber, wizard: frontWizard, lava: frontLava, camo: frontCamo, retro: frontRetro,
             ninja: frontNinja, golden: frontGolden, neonglitch: frontNeonGlitch, mecha: frontMecha,
@@ -751,7 +1301,6 @@
             infinitydino: frontInfinityDino, glitchking: frontGlitchKing
         };
 
-        // FIXED: Merge the new skins AFTER FLAIR_FRONT_RENDERERS is defined.
         Object.assign(FLAIR_FRONT_RENDERERS, {
             samurai: frontSamurai, biolum: frontBiolum, vampire: frontVampire, fallout: frontFallout,
             astral: frontAstral, solarflare: frontSolarFlare, necromancer: frontNecromancer,
@@ -786,6 +1335,7 @@
                     spawnBurst(this.x + this.w / 2, this.y + this.h, 10, POWERUP_COLORS.doubleJump, { spread: 6, power: 3, life: 20, gravity: 0.15 });
                     Sound.doubleJump();
                 }
+                spawnTrailJumpEffect(this);
             },
             duck: function (isDucking) {
                 this.duckHeld = isDucking;
@@ -903,6 +1453,9 @@
             }
         }
 
+        /* =========================================================================
+         * BOSS SYSTEM & ATTACKS
+         * ========================================================================= */
         class Boss {
             constructor() {
                 this.x = CANVAS_WIDTH + 60; this.hoverX = CANVAS_WIDTH - BOSS_W - 24; this.baseY = 30; this.y = this.baseY; this.bob = Math.random() * Math.PI * 2;
@@ -935,7 +1488,35 @@
         }
 
         /* =========================================================================
-         * CORE GAME LOGIC & RENDERING
+         * FLOATING TEXT & CAMERA SHAKE SYSTEMS
+         * ========================================================================= */
+        class FloatingText {
+            constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; this.life = 40; this.vy = -1; }
+            update() { this.y += this.vy; this.life--; }
+            draw() { ctx.save(); ctx.globalAlpha = Math.max(0, this.life / 40); ctx.fillStyle = this.color; ctx.font = 'bold 9px "Press Start 2P", monospace'; ctx.fillText(this.text, this.x, this.y); ctx.restore(); }
+        }
+        let floatingTexts = [];
+        function spawnFloatingText(x, y, text, color) { floatingTexts.push(new FloatingText(x, y, text, color)); }
+        function updateAndDrawFloatingTexts() {
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].update(); floatingTexts[i].draw();
+                if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
+            }
+        }
+
+        let shakeDuration = 0, shakeMagnitude = 0;
+        function triggerShake(magnitude, duration) { shakeMagnitude = magnitude; shakeDuration = duration; }
+        function applyShake() {
+            if (shakeDuration > 0) {
+                const dx = (Math.random() - 0.5) * shakeMagnitude;
+                const dy = (Math.random() - 0.5) * shakeMagnitude;
+                ctx.translate(dx, dy);
+                shakeDuration--;
+            }
+        }
+
+        /* =========================================================================
+         * CORE RUN LOOPS & ENGINE CONTROLLER
          * ========================================================================= */
         function initGame() {
             obstacles = []; clouds = []; collectibles = []; powerUps = []; particles = []; floatingTexts = []; groundMarks = []; fireballs = [];
@@ -1038,13 +1619,49 @@
             if (bossExiting && boss.x > CANVAS_WIDTH) { boss = null; bossExiting = false; bossPhaseState = null; }
         }
 
+        function updateTrailSystem() {
+    const trail = getEquippedTrail();
+    if (trail.id === 'none') return;
+    const rate = TRAIL_SPAWN_RATE[trail.id] || 2;
+    if (frames % rate === 0) {
+        // Stratified round-robin sampling down the Dino's FULL trailing edge (dino.y -> dino.y + dino.h).
+        // Over consecutive spawns this covers the entire body evenly, reading as one cohesive wake
+        // instead of a single trickle point at the tail.
+        const band = trailEdgeIndex % TRAIL_EDGE_BANDS;
+        trailEdgeIndex++;
+        const bandHeight = dino.h / TRAIL_EDGE_BANDS;
+        const edgeY = dino.y + band * bandHeight + Math.random() * bandHeight;
+        spawnTrailParticle(trail.id, dino.x + 6, edgeY);
+    }
+}
+
+        function spawnTrailJumpEffect(dinoObj) {
+            const trail = getEquippedTrail();
+            if (trail.id === 'none') return;
+            for (let i = 0; i < 5; i++) {
+                spawnTrailParticle(trail.id, dinoObj.x + dinoObj.w / 2, dinoObj.y + dinoObj.h);
+            }
+        }
+
+        function updateAndDrawTrailParticles() {
+    // Safety valve for the longer lifespans: trim oldest (soonest-to-die, lowest-alpha) particles first
+    if (trailParticles.length > MAX_TRAIL_PARTICLES) {
+        trailParticles.splice(0, trailParticles.length - MAX_TRAIL_PARTICLES);
+    }
+    for (let i = trailParticles.length - 1; i >= 0; i--) {
+        trailParticles[i].update();
+        trailParticles[i].draw();
+        if (trailParticles[i].dead) trailParticles.splice(i, 1);
+    }
+}
+
         function animate() {
             animationId = requestAnimationFrame(animate);
             ctx.setTransform(1, 0, 0, 1, 0, 0); updateTheme();
             if (!isPlaying && !isGameOver) { ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); drawSky(); drawGround(); dino.draw(); return; }
             if (isGameOver) {
                 ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); applyShake(); drawSky(); drawGround(); clouds.forEach(c => c.draw()); obstacles.forEach(o => o.draw()); collectibles.forEach(c => c.draw()); powerUps.forEach(p => p.draw());
-                if (boss) boss.draw(); fireballs.forEach(fb => fb.draw()); if (isBossPhase) drawBossUI(); updateAndDrawParticles(); updateAndDrawFloatingTexts(); dino.draw(); return;
+                if (boss) boss.draw(); fireballs.forEach(fb => fb.draw()); if (isBossPhase) drawBossUI(); updateAndDrawParticles(); updateAndDrawTrailParticles(); updateAndDrawFloatingTexts(); dino.draw(); return;
             }
 
             ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); applyShake(); frames++;
@@ -1092,7 +1709,7 @@
                 if (p.x + p.w < 0) powerUps.splice(i, 1);
             }
 
-            updateAndDrawBoss(); updateAndDrawParticles(); updateAndDrawFloatingTexts(); dino.update(); dino.draw();
+            updateAndDrawBoss(); updateAndDrawParticles(); updateTrailSystem(); updateAndDrawTrailParticles(); updateAndDrawFloatingTexts(); dino.update(); dino.draw();
         }
 
         /* =========================================================================
@@ -1111,11 +1728,38 @@
             drawSkinFlairFront(pctx, skin, sc, ox, oy, 40, 44, false);
         }
 
-        function renderShop() {
-            shopCoinDisplay.textContent = '🪙 ' + saveData.coins; shopGrid.innerHTML = '';
+        function drawTrailPreview(canvasEl, trail) {
+            const pctx = canvasEl.getContext('2d'), W = canvasEl.width, H = canvasEl.height;
+            pctx.clearRect(0, 0, W, H);
+            if (trail.id === 'none') {
+                pctx.strokeStyle = '#999999'; pctx.lineWidth = 1; pctx.setLineDash([3, 3]);
+                pctx.strokeRect(6, 6, W - 12, H - 12); pctx.setLineDash([]);
+                pctx.fillStyle = '#999999'; pctx.font = '8px monospace'; pctx.textAlign = 'center';
+                pctx.fillText('NONE', W / 2, H / 2 + 3); pctx.textAlign = 'start';
+                return;
+            }
+            const colors = trail.colors, cx = W * 0.72, cy = H * 0.55;
+            pctx.fillStyle = '#535353'; pctx.fillRect(cx - 5, cy - 10, 10, 18);
+            for (let i = 0; i < 7; i++) {
+                const x = cx - 12 - i * 6.5, y = cy + Math.sin(i * 1.3) * 4;
+                pctx.globalAlpha = Math.max(0, 1 - i * 0.13);
+                pctx.fillStyle = colors[i % colors.length];
+                pctx.beginPath(); pctx.arc(x, y, Math.max(0.5, 3 - i * 0.3), 0, Math.PI * 2); pctx.fill();
+            }
+            pctx.globalAlpha = 1;
+        }
+        let shopTab = 'skins';
+        function setShopTab(tab) {
+            shopTab = tab;
+            tabSkinsBtn.className = 'flex-1 text-[10px] md:text-xs px-2 py-1.5 border-2 rounded transition-colors ' + (tab === 'skins' ? 'border-yellow-400 bg-yellow-400/10 text-yellow-600 dark:text-yellow-400' : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700');
+            tabTrailsBtn.className = 'flex-1 text-[10px] md:text-xs px-2 py-1.5 border-2 rounded transition-colors ' + (tab === 'trails' ? 'border-yellow-400 bg-yellow-400/10 text-yellow-600 dark:text-yellow-400' : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700');
+            renderShop();
+        }
+        function renderSkinGrid() {
+            shopGrid.innerHTML = '';
             SKINS.forEach(skin => {
                 const owned = saveData.unlockedSkins.includes(skin.id), equipped = saveData.equippedSkin === skin.id;
-                const card = document.createElement('div'); card.className = 'border-2 rounded p-2 flex flex-col items-center gap-1 text-center ' + (equipped ? 'border-yellow-400' : 'border-gray-300 dark:border-gray-600');
+                const card = document.createElement('div'); card.className = 'border-2 rounded p-2 flex flex-col items-center gap-1 text-center ' + (equipped ? 'border-yellow-400 bg-yellow-400/5' : 'border-gray-300 dark:border-gray-600');
                 const prevCanvas = document.createElement('canvas'); prevCanvas.width = 60; prevCanvas.height = 72; prevCanvas.className = 'mx-auto'; prevCanvas.style.width = '48px'; prevCanvas.style.height = '58px'; drawSkinPreview(prevCanvas, skin);
                 const name = document.createElement('div'); name.className = 'text-[9px] md:text-[10px] mt-1'; name.textContent = skin.name;
                 const actionBtn = document.createElement('button'); actionBtn.className = 'text-[8px] md:text-[9px] px-2 py-1 rounded border w-full mt-1 transition-colors';
@@ -1129,6 +1773,29 @@
                 }
                 card.appendChild(prevCanvas); card.appendChild(name); card.appendChild(actionBtn); shopGrid.appendChild(card);
             });
+        }
+        function renderTrailGrid() {
+            shopGrid.innerHTML = '';
+            TRAILS.forEach(trail => {
+                const owned = saveData.unlockedTrails.includes(trail.id), equipped = saveData.equippedTrail === trail.id;
+                const card = document.createElement('div'); card.className = 'border-2 rounded p-2 flex flex-col items-center gap-1 text-center ' + (equipped ? 'border-yellow-400 bg-yellow-400/5' : 'border-gray-300 dark:border-gray-600');
+                const prevCanvas = document.createElement('canvas'); prevCanvas.width = 60; prevCanvas.height = 44; prevCanvas.className = 'mx-auto'; prevCanvas.style.width = '54px'; prevCanvas.style.height = '40px'; drawTrailPreview(prevCanvas, trail);
+                const name = document.createElement('div'); name.className = 'text-[9px] md:text-[10px] mt-1'; name.textContent = trail.name;
+                const actionBtn = document.createElement('button'); actionBtn.className = 'text-[8px] md:text-[9px] px-2 py-1 rounded border w-full mt-1 transition-colors';
+                if (equipped) { actionBtn.textContent = 'EQUIPPED'; actionBtn.disabled = true; actionBtn.className += ' bg-yellow-400/20 border-yellow-400 text-yellow-600 dark:text-yellow-400 cursor-default'; }
+                else if (owned) { actionBtn.textContent = 'EQUIP'; actionBtn.className += ' border-gray-400 dark:border-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'; actionBtn.addEventListener('click', (e) => { e.stopPropagation(); saveData.equippedTrail = trail.id; persistSave(); renderShop(); }); }
+                else {
+                    const canAfford = saveData.coins >= trail.cost; actionBtn.textContent = '🪙 ' + trail.cost;
+                    actionBtn.className += canAfford ? ' border-green-400 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30' : ' border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed';
+                    if (!canAfford) actionBtn.disabled = true;
+                    actionBtn.addEventListener('click', (e) => { e.stopPropagation(); if (saveData.coins < trail.cost) return; saveData.coins -= trail.cost; saveData.unlockedTrails.push(trail.id); saveData.equippedTrail = trail.id; persistSave(); updateCoinDisplay(); Sound.unlockSkin(); renderShop(); });
+                }
+                card.appendChild(prevCanvas); card.appendChild(name); card.appendChild(actionBtn); shopGrid.appendChild(card);
+            });
+        }
+        function renderShop() {
+            shopCoinDisplay.textContent = '🪙 ' + saveData.coins;
+            if (shopTab === 'trails') renderTrailGrid(); else renderSkinGrid();
         }
         function openShop() { shopOpen = true; jumpHeld = false; renderShop(); shopOverlay.classList.remove('hidden'); }
         function closeShop() { shopOpen = false; shopOverlay.classList.add('hidden'); }
@@ -1174,9 +1841,14 @@
 
         shopBtn.addEventListener('mousedown', (e) => e.stopPropagation()); shopBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); shopBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.unlock(); openShop(); });
         shopCloseBtn.addEventListener('mousedown', (e) => e.stopPropagation()); shopCloseBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); shopCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeShop(); });
+        tabSkinsBtn.addEventListener('mousedown', (e) => e.stopPropagation()); tabSkinsBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); tabSkinsBtn.addEventListener('click', (e) => { e.stopPropagation(); if (shopTab !== 'skins') setShopTab('skins'); });
+        tabTrailsBtn.addEventListener('mousedown', (e) => e.stopPropagation()); tabTrailsBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); tabTrailsBtn.addEventListener('click', (e) => { e.stopPropagation(); if (shopTab !== 'trails') setShopTab('trails'); });
         shopOverlay.addEventListener('mousedown', (e) => { if (e.target === shopOverlay) closeShop(); });
         muteBtn.addEventListener('mousedown', (e) => e.stopPropagation()); muteBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); muteBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.unlock(); saveData.muted = !saveData.muted; persistSave(); updateMuteButton(); });
 
+        /* =========================================================================
+         * BOOT SYSTEM
+         * ========================================================================= */
         loadSave(); highScore = saveData.highScore || 0; updateMuteButton(); updateCoinDisplay();
         fitCanvasToViewport(); updateTheme(); ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); drawSky(); drawGround(); dino.draw(); updateScoreDisplay(); animate();
 
