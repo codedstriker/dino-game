@@ -44,6 +44,7 @@
         /* ---------------------------------------------------------------------
            RESPONSIVE VIEWPORT SCALING
            ------------------------------------------------------------------- */
+         /* SEARCH */
         canvas {
             display: block;
             margin: 0 auto;
@@ -54,7 +55,6 @@
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
         }
-
         /* Safe-area aware HUD padding */
         #hud-title {
             top: max(0.75rem, env(safe-area-inset-top));
@@ -140,7 +140,6 @@
 
         <!-- Score Display -->
         <div id="hud-score-bar" class="absolute flex items-center gap-2 md:gap-5 text-sm md:text-base text-gray-600 dark:text-gray-400 z-10">
-            <button id="mute-btn" class="text-sm md:text-base leading-none hover:opacity-70 transition-opacity" title="Toggle sound" aria-label="Toggle sound">🔊</button>
             <div id="coin-total" class="text-[9px] md:text-xs text-yellow-600 dark:text-yellow-400 whitespace-nowrap">🪙 0</div>
             <div class="whitespace-nowrap">HI <span id="high-score">00000</span></div>
             <div id="current-score">00000</div>
@@ -191,7 +190,6 @@
         const gameOverText = document.getElementById('game-over-text');
         const scoreElement = document.getElementById('current-score');
         const highScoreElement = document.getElementById('high-score');
-        const muteBtn = document.getElementById('mute-btn');
         const coinTotalElement = document.getElementById('coin-total');
         const shopBtn = document.getElementById('shop-btn');
         const shopOverlay = document.getElementById('shop-overlay');
@@ -234,6 +232,8 @@
         const FIREBALL_JUMP_Y = GROUND_Y - 18;
         const FIREBALL_DUCK_Y = GROUND_Y - 50;
 
+        /* REPLACE */
+        /* SEARCH */
         function fitCanvasToViewport() {
             const aspectRatio = CANVAS_WIDTH / CANVAS_HEIGHT;
             const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
@@ -377,7 +377,6 @@
             try { localStorage.setItem(SAVE_KEY, JSON.stringify(saveData)); } catch (err) {}
         }
         function updateCoinDisplay() { coinTotalElement.textContent = '🪙 ' + saveData.coins; }
-        function updateMuteButton() { muteBtn.textContent = saveData.muted ? '🔇' : '🔊'; }
 
         const Sound = (() => {
             let audioCtx = null;
@@ -1819,7 +1818,8 @@ draw(targetCtx = ctx) {
         window.addEventListener('mouseup', () => { jumpHeld = false; });
 
         const SWIPE_THRESHOLD = 26, TAP_MAX_DURATION = 250; let touchState = null;
-        function isInteractiveTarget(target) { return !!target.closest('#shop-btn, #shop-overlay, #mute-btn, #shop-close-btn'); }
+        /* REPLACE */
+        function isInteractiveTarget(target) { return !!target.closest('#shop-btn, #shop-overlay, #shop-close-btn'); }
         function onTouchStart(e) {
             if (shopOpen || isInteractiveTarget(e.target) || e.touches.length !== 1) return; Sound.unlock();
             const t = e.touches[0]; touchState = { startX: t.clientX, startY: t.clientY, startTime: performance.now(), jumpFired: false, duckFired: false };
@@ -1843,13 +1843,13 @@ draw(targetCtx = ctx) {
         shopCloseBtn.addEventListener('mousedown', (e) => e.stopPropagation()); shopCloseBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); shopCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeShop(); });
         tabSkinsBtn.addEventListener('mousedown', (e) => e.stopPropagation()); tabSkinsBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); tabSkinsBtn.addEventListener('click', (e) => { e.stopPropagation(); if (shopTab !== 'skins') setShopTab('skins'); });
         tabTrailsBtn.addEventListener('mousedown', (e) => e.stopPropagation()); tabTrailsBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); tabTrailsBtn.addEventListener('click', (e) => { e.stopPropagation(); if (shopTab !== 'trails') setShopTab('trails'); });
+        /* REPLACE */
         shopOverlay.addEventListener('mousedown', (e) => { if (e.target === shopOverlay) closeShop(); });
-        muteBtn.addEventListener('mousedown', (e) => e.stopPropagation()); muteBtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true }); muteBtn.addEventListener('click', (e) => { e.stopPropagation(); Sound.unlock(); saveData.muted = !saveData.muted; persistSave(); updateMuteButton(); });
-
         /* =========================================================================
          * BOOT SYSTEM
          * ========================================================================= */
-        loadSave(); highScore = saveData.highScore || 0; updateMuteButton(); updateCoinDisplay();
+       /* REPLACE */
+        loadSave(); highScore = saveData.highScore || 0; updateCoinDisplay();
         fitCanvasToViewport(); updateTheme(); ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); drawSky(); drawGround(); dino.draw(); updateScoreDisplay(); animate();
 
     </script>
